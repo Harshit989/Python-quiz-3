@@ -1,48 +1,21 @@
-import sqlite3
+import mysql.connector
 import random
 import json
 
-DB_NAME = "quiz_app.db"
+# Database configuration
+DB_CONFIG = {
+    "host": "localhost",
+    "user": "root",  # Change to your MySQL username
+    "password": "password",  # Change to your MySQL password
+    "database": "quiz_app"
+}
 
-# Database initialization
-def initialize_database():
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
+# Initialize database connection
+def connect_db():
+    return mysql.connector.connect(**DB_CONFIG)
 
-    # Create tables
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            reg_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            password TEXT NOT NULL
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS questions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject TEXT NOT NULL,
-            question TEXT NOT NULL,
-            options TEXT NOT NULL, -- JSON encoded options
-            correct_answer TEXT NOT NULL
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS quiz_attempts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            reg_id TEXT NOT NULL,
-            subject TEXT NOT NULL,
-            score INTEGER NOT NULL,
-            FOREIGN KEY (reg_id) REFERENCES users (reg_id)
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-# Function to insert questions into the database
+# Insert quiz questions into the database
 def insert_questions():
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-
     quiz_questions = {
         "Operating System": [
             ("What is a process?", ["A. A program in execution", "B. An inactive program", "C. A CPU", "D. A file"], "A"),
@@ -51,19 +24,22 @@ def insert_questions():
         # Add other subjects...
     }
 
+    conn = connect_db()
+    cursor = conn.cursor()
+
     for subject, questions in quiz_questions.items():
         for question, options, answer in questions:
             cursor.execute("""
                 INSERT INTO questions (subject, question, options, correct_answer)
-                VALUES (?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s)
             """, (subject, question, json.dumps(options), answer))
 
     conn.commit()
     conn.close()
 
-# Function to register a student
+# Register a student
 def register_student():
-    conn = sqlite3.connect(DB_NAME)
+    conn = connect_db()
     cursor = conn.cursor()
 
     print("\n--- Registration ---")
@@ -71,27 +47,27 @@ def register_student():
     reg_id = input("Create a registration ID: ")
     password = input("Create a password: ")
 
-    cursor.execute("SELECT * FROM users WHERE reg_id = ?", (reg_id,))
+    cursor.execute("SELECT * FROM users WHERE reg_id = %s", (reg_id,))
     if cursor.fetchone():
         print("Registration ID already exists. Please try again.")
         conn.close()
         return register_student()
 
-    cursor.execute("INSERT INTO users (reg_id, name, password) VALUES (?, ?, ?)", (reg_id, name, password))
+    cursor.execute("INSERT INTO users (reg_id, name, password) VALUES (%s, %s, %s)", (reg_id, name, password))
     conn.commit()
     conn.close()
     print(f"Registration successful. Your registration ID is {reg_id}.")
 
-# Function to log in a student
+# Log in a student
 def login_student():
-    conn = sqlite3.connect(DB_NAME)
+    conn = connect_db()
     cursor = conn.cursor()
 
     print("\n--- Login ---")
     reg_id = input("Enter your registration ID: ")
     password = input("Enter your password: ")
 
-    cursor.execute("SELECT * FROM users WHERE reg_id = ? AND password = ?", (reg_id, password))
+    cursor.execute("SELECT * FROM users WHERE reg_id = %s AND password = %s", (reg_id, password))
     if cursor.fetchone():
         conn.close()
         print(f"Login successful. Welcome!")
@@ -101,12 +77,12 @@ def login_student():
         print("Invalid registration ID or password. Please try again.")
         return login_student()
 
-# Function to take a quiz
+# Take a quiz
 def take_quiz(subject, reg_id):
-    conn = sqlite3.connect(DB_NAME)
+    conn = connect_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM questions WHERE subject = ?", (subject,))
+    cursor.execute("SELECT * FROM questions WHERE subject = %s", (subject,))
     questions = cursor.fetchall()
 
     selected_questions = random.sample(questions, 5)
@@ -122,12 +98,12 @@ def take_quiz(subject, reg_id):
         if user_answer == correct_answer:
             score += 1
 
-    cursor.execute("INSERT INTO quiz_attempts (reg_id, subject, score) VALUES (?, ?, ?)", (reg_id, subject, score))
+    cursor.execute("INSERT INTO quiz_attempts (reg_id, subject, score) VALUES (%s, %s, %s)", (reg_id, subject, score))
     conn.commit()
     conn.close()
     print(f"\nYou scored {score}/5 in the {subject} quiz.")
 
-# Function to choose a subject
+# Choose a subject
 def choose_subject():
     print("\n--- Choose Subject ---")
     print("1. Operating System")
@@ -147,8 +123,6 @@ def choose_subject():
 
 # Main function
 def main():
-    initialize_database()
-
     while True:
         print("\n--- Welcome to the Quiz Application ---")
         print("1. Register")
